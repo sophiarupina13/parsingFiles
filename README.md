@@ -1,7 +1,5 @@
 # parsingFiles
 
-https://github.com/sophiarupina13/parsingFiles.git
-
 🚀 Getting Started
 
 1. Clone the repository: git clone https://github.com/sophiarupina13/parsingFiles.git
