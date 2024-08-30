@@ -1,5 +1,7 @@
 package org.example;
 
+import org.example.CycleException;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,7 +19,7 @@ public class ParsingFiles {
     public static void main(String[] args) throws IOException {
 
         Scanner scanner = new Scanner(System.in);
-        System.out.print("Enter the root directory path: \n");
+        System.out.print("Enter the root directory path:\n");
         rootDirectory = scanner.nextLine().replace("/", "\\");
         scanner.close();
 
@@ -25,7 +27,6 @@ public class ParsingFiles {
             Path rootPath = Paths.get(rootDirectory);
             revealFileDependencies(rootPath);
             concatenateFiles();
-            System.out.println("The result is in 'output.txt' file");
         } catch (IOException e) {
             System.out.println("Error processing files: " + e.getMessage());
         }
@@ -41,38 +42,52 @@ public class ParsingFiles {
 
                     boolean fileIsInStack = sortedFiles.contains(relativePath);
 
-                    if (!fileIsInStack) {
-
                     filesDependencies.putIfAbsent(relativePath, new ArrayList<>());
 
-                        try {
-                            List<String> lines = Files.readAllLines(filePath, StandardCharsets.UTF_8);
-                            for (String line : lines) {
-                                if (line.startsWith("require")) {
-                                    String requiredFilePath = line.split("‘|’")[1];
-                                    filesDependencies.get(relativePath).add(requiredFilePath);
-                                }
+                    try {
+                        List<String> lines = Files.readAllLines(filePath, StandardCharsets.UTF_8);
+                        for (String line : lines) {
+                            if (line.startsWith("require")) {
+                                String requiredFilePath = line.split("‘|’")[1].replace("/", "\\") + ".txt";
+                                filesDependencies.get(relativePath).add(requiredFilePath);
                             }
-                            var fileDependencies = filesDependencies.get(relativePath);
-                            updateStructure(relativePath, fileDependencies);
-                            if (!sortedFiles.contains(relativePath)) sortedFiles.add(relativePath);
-                        } catch (IOException e) {
-                            System.out.println("Cannot read files");
                         }
-                    }
+                        var fileDependencies = filesDependencies.get(relativePath);
+                        if (!fileIsInStack) {
+                            updateStructure(relativePath, fileDependencies);
+                        }
+                        else {
+                            if (checkForCycleDependency(relativePath, fileDependencies)) {
+                                System.out.println("Cycle detected: " + sortedFiles);
+                                throw new CycleException("Cycle detected: " + sortedFiles);
+                            }
+                        }
 
+                    } catch (IOException e) {
+                        System.out.println("Cannot read files");
+                    } catch (CycleException e) {
+                        throw new RuntimeException(e);
+                    }
                 });
     }
 
     private static void updateStructure(String filePath, List<String> fileDependencies) {
         for (String dependency : fileDependencies) {
-            dependency = dependency.replace("/", "\\") + ".txt";
             if (!sortedFiles.contains(dependency)) {
                 sortedFiles.add(dependency);
             }
         }
         if (!sortedFiles.contains(filePath)) sortedFiles.add(filePath);
-        else System.out.println("Cycle dependency detected");
+    }
+
+    private static boolean checkForCycleDependency(String relativePath, List<String> fileDependencies) {
+        for (String key : filesDependencies.keySet()) {
+            if (fileDependencies.contains(key) && filesDependencies.get(key).contains(relativePath)) {
+                sortedFiles.add(relativePath);
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void concatenateFiles() {
@@ -93,6 +108,7 @@ public class ParsingFiles {
 
         try {
             Files.write(Paths.get(rootDirectory, "output.txt"), result.toString().getBytes(StandardCharsets.UTF_8));
+            System.out.println("The result is in 'output.txt' file");
         } catch (IOException e) {
             System.out.println("Cannot write final file");
         }
